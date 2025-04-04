@@ -8,7 +8,8 @@ import {
   Tag, 
   ClipboardList, 
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Store
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -53,6 +54,11 @@ const Sidebar = () => {
       icon: <LayoutDashboard className="w-5 h-5" />,
       title: "Dashboard",
       path: "/dashboard",
+    },
+    {
+      icon: <Store className="w-5 h-5" />,
+      title: "Point of Sale",
+      path: "/pos",
     },
     {
       icon: <ShoppingBasket className="w-5 h-5" />,

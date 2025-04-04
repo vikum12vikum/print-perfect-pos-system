@@ -1,7 +1,9 @@
-
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getOrders, getOrderItems, deleteOrder } from "@/lib/api";
+import { getOrders, getOrderById, getOrderItems } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Order, OrderItem } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -10,99 +12,60 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { formatCurrency } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Eye, Trash2, Printer } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import Receipt from "@/components/Receipt";
+import { CalendarIcon, Receipt } from "lucide-react";
+import { format } from "date-fns";
+import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { printReceipt } from "@/lib/utils";
-import { Order, OrderItem } from "@/lib/types";
 
 interface OrderResponse {
+  code: number;
+  data: Order[];
+}
+
+interface OrderItemResponse {
+  code: number;
+  data: OrderItem[];
+}
+
+interface SingleOrderResponse {
   code: number;
   data: Order;
 }
 
 const OrdersPage = () => {
-  const [viewOrderId, setViewOrderId] = useState<number | null>(null);
-  const [deleteOrderId, setDeleteOrderId] = useState<number | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const receiptRef = useRef<HTMLDivElement>(null);
-  
-  const { data: ordersData, isLoading, refetch } = useQuery({
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+
+  const { data: ordersData, isLoading: isLoadingOrders } = useQuery({
     queryKey: ["orders"],
-    queryFn: () => getOrders(),
+    queryFn: () => getOrders() as Promise<OrderResponse>,
   });
 
-  const handleViewOrder = async (orderId: number) => {
+  const viewOrderDetails = async (orderId: number) => {
     try {
-      const orderResponse = await getOrderById(orderId);
-      const itemsResponse = await getOrderItems(orderId);
+      const orderResponse = await getOrderById(orderId) as Promise<SingleOrderResponse>;
+      const itemsResponse = await getOrderItems(orderId) as Promise<OrderItemResponse>;
       
       setSelectedOrder(orderResponse.data);
       setOrderItems(itemsResponse.data);
-      setViewOrderId(orderId);
+      setIsDetailsOpen(true);
     } catch (error) {
       console.error("Error fetching order details:", error);
-      toast.error("Failed to load order details");
+      toast.error("Failed to fetch order details");
     }
   };
 
   const handlePrintReceipt = () => {
-    if (!selectedOrder) return;
-    printReceipt();
-  };
-
-  const handleDeleteOrder = async () => {
-    if (!deleteOrderId) return;
-    
-    try {
-      await deleteOrder(deleteOrderId);
-      toast.success("Order deleted successfully");
-      refetch();
-      setDeleteOrderId(null);
-    } catch (error) {
-      console.error("Error deleting order:", error);
-      toast.error("Failed to delete order");
-    }
-  };
-
-  const getOrderById = async (id: number): Promise<OrderResponse> => {
-    try {
-      const response = await fetch(`http://45.77.171.162:3000/orders/${id}`, {
-        headers: {
-          "Authorization": localStorage.getItem("posToken") || "",
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch order");
-      }
-      
-      return await response.json() as OrderResponse;
-    } catch (error) {
-      console.error("Error fetching order:", error);
-      toast.error("Failed to load order");
-      throw error;
+    if (selectedOrder) {
+      printReceipt();
     }
   };
 
@@ -110,156 +73,156 @@ const OrdersPage = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2">Orders</h1>
-        <p className="text-muted-foreground">
-          View and manage customer orders
-        </p>
+        <p className="text-muted-foreground">View and manage your orders</p>
       </div>
 
-      {isLoading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, index) => (
-            <Skeleton key={index} className="h-12 w-full" />
-          ))}
-        </div>
-      ) : (
-        <div className="border rounded-md">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Reference</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ordersData?.data.length === 0 ? (
+      {isLoadingOrders ? (
+        <div className="space-y-3">
+          <Skeleton className="h-8 w-1/4" />
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
-                    No orders found
-                  </TableCell>
+                  <TableHead className="w-[100px]">Order ID</TableHead>
+                  <TableHead>Reference</TableHead>
+                  <TableHead>User ID</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Created At</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                ordersData?.data.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell>{order.id}</TableCell>
-                    <TableCell>{order.reference}</TableCell>
-                    <TableCell>{formatCurrency(order.total)}</TableCell>
-                    <TableCell>{new Date(order.created_at).toLocaleString()}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleViewOrder(order.id)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteOrderId(order.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
+              </TableHeader>
+              <TableBody>
+                {[...Array(5)].map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium"><Skeleton /></TableCell>
+                    <TableCell><Skeleton /></TableCell>
+                    <TableCell><Skeleton /></TableCell>
+                    <TableCell><Skeleton /></TableCell>
+                    <TableCell><Skeleton /></TableCell>
+                    <TableCell className="text-right"><Skeleton /></TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      ) : ordersData?.data && ordersData.data.length > 0 ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[100px]">Order ID</TableHead>
+              <TableHead>Reference</TableHead>
+              <TableHead>User ID</TableHead>
+              <TableHead>Total</TableHead>
+              <TableHead>Created At</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {ordersData.data.map((order) => (
+              <TableRow key={order.id}>
+                <TableCell className="font-medium">{order.id}</TableCell>
+                <TableCell>{order.reference}</TableCell>
+                <TableCell>{order.user_id}</TableCell>
+                <TableCell>{formatCurrency(order.total)}</TableCell>
+                <TableCell>
+                  {format(new Date(order.created_at), "PPP")}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => viewOrderDetails(order.id)}
+                  >
+                    Details
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No orders found</p>
         </div>
       )}
 
-      {/* Order Details Dialog */}
-      <Dialog open={viewOrderId !== null} onOpenChange={(open) => !open && setViewOrderId(null)}>
-        <DialogContent className="max-w-3xl">
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="sm:max-w-[625px]">
           <DialogHeader>
             <DialogTitle>Order Details</DialogTitle>
-            <DialogDescription>
-              Viewing order #{selectedOrder?.reference}
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4">
-            <div className="flex justify-between mb-4">
-              <div>
-                <p><strong>Order ID:</strong> {selectedOrder?.id}</p>
-                <p><strong>Date:</strong> {selectedOrder ? new Date(selectedOrder.created_at).toLocaleString() : ''}</p>
+          {selectedOrder ? (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm font-medium leading-none">Order ID</p>
+                  <p className="text-sm text-muted-foreground">{selectedOrder.id}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium leading-none">Reference</p>
+                  <p className="text-sm text-muted-foreground">{selectedOrder.reference}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium leading-none">User ID</p>
+                  <p className="text-sm text-muted-foreground">{selectedOrder.user_id}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium leading-none">Total</p>
+                  <p className="text-sm text-muted-foreground">{formatCurrency(selectedOrder.total)}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium leading-none">Created At</p>
+                  <p className="text-sm text-muted-foreground">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(new Date(selectedOrder.created_at), "PPP")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium leading-none">Updated At</p>
+                  <p className="text-sm text-muted-foreground">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(new Date(selectedOrder.updated_at), "PPP")}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p><strong>Reference:</strong> {selectedOrder?.reference}</p>
-                <p><strong>Total:</strong> {selectedOrder ? formatCurrency(selectedOrder.total) : ''}</p>
-              </div>
-            </div>
 
-            <h3 className="font-semibold mb-2">Items</h3>
-            <div className="border rounded-md">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product ID</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orderItems.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-4">No items found</TableCell>
-                    </TableRow>
-                  ) : (
-                    orderItems.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{item.product_id}</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>{formatCurrency(item.price)}</TableCell>
-                        <TableCell>{formatCurrency(item.price * item.quantity)}</TableCell>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Order Items</h3>
+                {orderItems.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product ID</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Price</TableHead>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            
-            <div className="mt-6 text-right">
-              <Button className="ml-auto" onClick={handlePrintReceipt}>
-                <Printer className="mr-2 h-4 w-4" /> Print Receipt
+                    </TableHeader>
+                    <TableBody>
+                      {orderItems.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.product_id}</TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>{formatCurrency(item.price)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="text-muted-foreground">No items found for this order.</p>
+                )}
+              </div>
+
+              <Button onClick={handlePrintReceipt}>
+                Print Receipt <Receipt className="ml-2 h-4 w-4" />
               </Button>
             </div>
-          </div>
+          ) : (
+            <p className="text-muted-foreground">Loading order details...</p>
+          )}
         </DialogContent>
       </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteOrderId !== null} onOpenChange={(open) => !open && setDeleteOrderId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete this order.
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteOrder}
-              className="bg-destructive text-destructive-foreground"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Hidden receipt for printing */}
-      {selectedOrder && (
-        <Receipt ref={receiptRef} order={selectedOrder} orderItems={orderItems} />
-      )}
     </div>
   );
 };
