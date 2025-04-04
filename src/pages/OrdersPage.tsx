@@ -1,3 +1,4 @@
+
 import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getOrders, getOrderItems, deleteOrder } from "@/lib/api";
@@ -97,7 +98,7 @@ const OrdersPage = () => {
         throw new Error("Failed to fetch order");
       }
       
-      return await response.json();
+      return await response.json() as OrderResponse;
     } catch (error) {
       console.error("Error fetching order:", error);
       toast.error("Failed to load order");
