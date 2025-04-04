@@ -1,4 +1,3 @@
-
 import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getOrders, getOrderItems, deleteOrder } from "@/lib/api";
@@ -35,6 +34,11 @@ import {
 import Receipt from "@/components/Receipt";
 import { printReceipt } from "@/lib/utils";
 import { Order, OrderItem } from "@/lib/types";
+
+interface OrderResponse {
+  code: number;
+  data: Order;
+}
 
 const OrdersPage = () => {
   const [viewOrderId, setViewOrderId] = useState<number | null>(null);
@@ -81,7 +85,7 @@ const OrdersPage = () => {
     }
   };
 
-  const getOrderById = async (id: number) => {
+  const getOrderById = async (id: number): Promise<OrderResponse> => {
     try {
       const response = await fetch(`http://45.77.171.162:3000/orders/${id}`, {
         headers: {
